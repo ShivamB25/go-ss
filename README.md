@@ -1,10 +1,20 @@
 # Go Website Screenshotter
 
-This tool takes screenshots of a list of websites provided in a JSON file using `gowitness`.
+A simple CLI tool to take screenshots of a list of websites from a JSON file using `gowitness`.
 
 ## Prerequisites
 
 You must have `gowitness` installed on your system. If you haven't installed it, follow the instructions on the [official gowitness repository](https://github.com/sensepost/gowitness).
+
+## Installation
+
+You can install the screenshotter CLI using `go install`:
+
+```bash
+go install github.com/shivamb25/go-ss/cmd/screenshotter
+```
+
+Replace `your-username` with your actual GitHub username. This will install the `screenshotter` binary in your `$GOPATH/bin` directory.
 
 ## Usage
 
@@ -18,41 +28,39 @@ You must have `gowitness` installed on your system. If you haven't installed it,
     ]
     ```
 
-2.  **Build the program**:
+2.  **Run the tool**:
 
-    ```bash
-    go build main.go
-    ```
-
-3.  **Run the program**:
+    Once installed, you can run the `screenshotter` command from anywhere in your terminal.
 
     To take screenshots of URLs in `mylinks.json` and save them to the `website-screenshots` directory (the default behavior):
 
     ```bash
-    ./main
+    screenshotter
     ```
 
     To specify a different input file:
 
     ```bash
-    ./main --file links.json
+    screenshotter --file links.json
     ```
 
     To specify a different output directory:
 
     ```bash
-    ./main --output my-screenshots
+    screenshotter --output my-screenshots
     ```
 
     You can also combine flags:
 
     ```bash
-    ./main --file mylinks.json --output my-screenshots
-    ```
-
-    Alternatively, you can run the program without building it using `go run`:
-    ```bash
-    go run main.go --file mylinks.json --output my-screenshots
+    screenshotter --file mylinks.json --output my-screenshots
     ```
 
     Screenshots will be saved in the specified output directory with filenames generated from the URLs.
+
+## Development
+
+To run the tool from the source code without installing:
+
+```bash
+go run ./cmd/screenshotter --file mylinks.json
