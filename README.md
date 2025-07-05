@@ -1,17 +1,19 @@
 # Go Website Screenshotter
 
-A simple CLI tool to take screenshots of a list of websites from a JSON file using `gowitness`.
+A simple, self-contained CLI tool to take screenshots of a list of websites concurrently using a headless browser. This tool uses `playwright-go` to control a headless Chromium instance.
 
 ## Prerequisites
 
-You must have `gowitness` installed on your system. If you haven't installed it, follow the instructions on the [official gowitness repository](https://github.com/sensepost/gowitness).
+- Go 1.16 or later.
+
+That's it! The tool will automatically download the necessary browser binaries on the first run.
 
 ## Installation
 
 You can install the screenshotter CLI using `go install`:
 
 ```bash
-go install github.com/shivamb25/go-ss/cmd/screenshotter
+go install github.com/your-username/go-ss/cmd/screenshotter
 ```
 
 Replace `your-username` with your actual GitHub username. This will install the `screenshotter` binary in your `$GOPATH/bin` directory.
@@ -24,7 +26,7 @@ Replace `your-username` with your actual GitHub username. This will install the 
     [
       "https://www.google.com",
       "https://github.com",
-      "https://sensepost.com"
+      "https://www.bing.com"
     ]
     ```
 
@@ -32,7 +34,7 @@ Replace `your-username` with your actual GitHub username. This will install the 
 
     Once installed, you can run the `screenshotter` command from anywhere in your terminal.
 
-    To take screenshots of URLs in `mylinks.json` and save them to the `website-screenshots` directory (the default behavior):
+    To take screenshots of URLs in `mylinks.json` and save them to the `website-screenshots` directory:
 
     ```bash
     screenshotter
@@ -50,10 +52,16 @@ Replace `your-username` with your actual GitHub username. This will install the 
     screenshotter --output my-screenshots
     ```
 
+    To control the number of concurrent browser instances:
+
+    ```bash
+    screenshotter --concurrency 5
+    ```
+
     You can also combine flags:
 
     ```bash
-    screenshotter --file mylinks.json --output my-screenshots
+    screenshotter --file mylinks.json --output my-screenshots --concurrency 20
     ```
 
     Screenshots will be saved in the specified output directory with filenames generated from the URLs.

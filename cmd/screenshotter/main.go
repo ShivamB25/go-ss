@@ -8,14 +8,44 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/playwright-community/playwright-go"
 )
 
 func main() {
 	// Define command-line flags
 	inputFile := flag.String("file", "mylinks.json", "JSON file containing a list of URLs to screenshot.")
 	outputDir := flag.String("output", "website-screenshots", "Directory to save screenshots.")
+	concurrency := flag.Int("concurrency", 10, "Number of concurrent screenshot operations.")
 	flag.Parse()
+
+	err := playwright.Install()
+	if err != nil {
+		log.Fatalf("could not install playwright dependencies: %v", err)
+	}
+
+	pw, err := playwright.Run()
+	if err != nil {
+		log.Fatalf("could not start playwright: %v", err)
+	}
+	defer func() {
+		if err = pw.Stop(); err != nil {
+			log.Fatalf("could not stop playwright: %v", err)
+		}
+	}()
+
+	browser, err := pw.Chromium.Launch()
+	if err != nil {
+		log.Fatalf("could not launch chromium: %v", err)
+	}
+	defer func() {
+		if err = browser.Close(); err != nil {
+			log.Fatalf("could not close browser: %v", err)
+		}
+	}()
 
 	urls, err := loadURLs(*inputFile)
 	if err != nil {
@@ -26,12 +56,29 @@ func main() {
 		log.Fatalf("Error creating output directory %s: %v", *outputDir, err)
 	}
 
-	for _, rawURL := range urls {
-		if err := takeScreenshot(rawURL, *outputDir); err != nil {
-			log.Printf("Failed to take screenshot for %s: %v", rawURL, err)
-		}
+	var wg sync.WaitGroup
+	urlChan := make(chan string)
+
+	// Start worker goroutines
+	for i := 0; i < *concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for rawURL := range urlChan {
+				if err := takeScreenshot(browser, rawURL, *outputDir); err != nil {
+					log.Printf("Failed to take screenshot for %s: %v", rawURL, err)
+				}
+			}
+		}()
 	}
 
+	// Feed URLs to the workers
+	for _, u := range urls {
+		urlChan <- u
+	}
+	close(urlChan)
+
+	wg.Wait()
 	fmt.Println("Screenshot process completed.")
 }
 
@@ -55,19 +102,57 @@ func loadURLs(filename string) ([]string, error) {
 	return urls, nil
 }
 
-func takeScreenshot(rawURL, outputDir string) error {
-	// Validate URL before proceeding
-	if _, err := url.ParseRequestURI(rawURL); err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
+func takeScreenshot(browser playwright.Browser, rawURL, outputDir string) error {
+	page, err := browser.NewPage()
+	if err != nil {
+		return fmt.Errorf("could not create page: %w", err)
+	}
+	defer page.Close()
+
+	fmt.Printf("Navigating to %s\n", rawURL)
+	_, err = page.Goto(rawURL, playwright.PageGotoOptions{
+		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		Timeout:   playwright.Float(60000), // 60 seconds
+	})
+	if err != nil {
+		return fmt.Errorf("could not navigate to %s: %w", rawURL, err)
 	}
 
-	fmt.Printf("Taking screenshot of %s (saving to %s)\n", rawURL, outputDir)
+	safeFilename := SanitizeFileName(rawURL) + ".png"
+	outputPath := filepath.Join(outputDir, safeFilename)
 
-	// Execute gowitness command using the --destination flag
-	cmd := exec.Command("gowitness", "single", "--destination", outputDir, rawURL)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("running gowitness for %s: %w\nOutput: %s", rawURL, err, string(output))
+	fmt.Printf("Taking screenshot of %s -> %s\n", rawURL, outputPath)
+	if _, err := page.Screenshot(playwright.PageScreenshotOptions{
+		Path:     playwright.String(outputPath),
+		FullPage: playwright.Bool(true),
+	}); err != nil {
+		return fmt.Errorf("could not take screenshot for %s: %w", rawURL, err)
 	}
 
 	return nil
+}
+
+// SanitizeFileName creates a safe filename from a URL
+func SanitizeFileName(rawURL string) string {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		// Fallback for invalid URLs
+		return strings.ReplaceAll(rawURL, "/", "_")
+	}
+	// Combine host and path, replacing invalid characters
+	name := fmt.Sprintf("%s%s", parsedURL.Host, parsedURL.Path)
+	r := strings.NewReplacer(
+		"/", "_",
+		"\\", "_",
+		":", "_",
+		"*", "_",
+		"?", "_",
+		"\"", "_",
+		"<", "_",
+		">", "_",
+		"|", "_",
+		"&", "_",
+		"=", "_",
+	)
+	return r.Replace(name)
 }
