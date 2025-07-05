@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 )
 
 func main() {
@@ -18,54 +17,57 @@ func main() {
 	outputDir := flag.String("output", "website-screenshots", "Directory to save screenshots.")
 	flag.Parse()
 
-	// Read the JSON file
-	jsonFile, err := os.Open(*inputFile)
+	urls, err := loadURLs(*inputFile)
 	if err != nil {
-		log.Fatalf("Error opening JSON file %s: %v", *inputFile, err)
-	}
-	defer jsonFile.Close()
-
-	byteValue, _ := ioutil.ReadAll(jsonFile)
-
-	var urls []string
-	json.Unmarshal(byteValue, &urls)
-
-	// Create the output directory if it doesn't exist
-	if _, err := os.Stat(*outputDir); os.IsNotExist(err) {
-		err := os.MkdirAll(*outputDir, 0755)
-		if err != nil {
-			log.Fatalf("Error creating output directory %s: %v", *outputDir, err)
-		}
+		log.Fatalf("Error loading URLs from %s: %v", *inputFile, err)
 	}
 
-	// Loop through URLs and take screenshots
+	if err := os.MkdirAll(*outputDir, 0755); err != nil {
+		log.Fatalf("Error creating output directory %s: %v", *outputDir, err)
+	}
+
 	for _, rawURL := range urls {
-		parsedURL, err := url.Parse(rawURL)
-		if err != nil {
-			log.Printf("Skipping invalid URL: %s", rawURL)
-			continue
-		}
-
-		// Generate a filename from the URL
-		filename := fmt.Sprintf("%s.png", parsedURL.Host+parsedURL.Path)
-		// Replace slashes in path with underscores for a valid filename
-		filename = filepath.Join(*outputDir, SanitizeFileName(filename))
-
-		fmt.Printf("Taking screenshot of %s and saving to %s\n", rawURL, filename)
-
-		// Execute gowitness command
-		cmd := exec.Command("gowitness", "single", "-o", filename, rawURL)
-		err = cmd.Run()
-		if err != nil {
-			log.Printf("Error taking screenshot for %s: %v", rawURL, err)
+		if err := takeScreenshot(rawURL, *outputDir); err != nil {
+			log.Printf("Failed to take screenshot for %s: %v", rawURL, err)
 		}
 	}
 
 	fmt.Println("Screenshot process completed.")
 }
 
-// SanitizeFileName replaces characters that are invalid in file names.
-func SanitizeFileName(name string) string {
-	// Replace path separators with a different character
-	return url.PathEscape(name)
+func loadURLs(filename string) ([]string, error) {
+	jsonFile, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("opening file: %w", err)
+	}
+	defer jsonFile.Close()
+
+	byteValue, err := io.ReadAll(jsonFile)
+	if err != nil {
+		return nil, fmt.Errorf("reading file: %w", err)
+	}
+
+	var urls []string
+	if err := json.Unmarshal(byteValue, &urls); err != nil {
+		return nil, fmt.Errorf("unmarshaling json: %w", err)
+	}
+
+	return urls, nil
+}
+
+func takeScreenshot(rawURL, outputDir string) error {
+	// Validate URL before proceeding
+	if _, err := url.ParseRequestURI(rawURL); err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	fmt.Printf("Taking screenshot of %s (saving to %s)\n", rawURL, outputDir)
+
+	// Execute gowitness command using the --destination flag
+	cmd := exec.Command("gowitness", "single", "--destination", outputDir, rawURL)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("running gowitness for %s: %w\nOutput: %s", rawURL, err, string(output))
+	}
+
+	return nil
 }
