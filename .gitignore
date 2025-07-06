@@ -32,3 +32,4 @@ go.work.sum
 # .vscode/
 mylinks.json
 website-screenshots/*
+.DS_Store
